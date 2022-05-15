@@ -1,5 +1,6 @@
 body {
     margin: 0;
+    font-family: "Roboto", sans-serif;
 }
 
 table {
@@ -16,6 +17,25 @@ table {
 
 .converter {
     padding: 0px 20px 20px;
+}
+
+.output_container {
+    position: relative;
+}
+
+.output_loader {
+    position: absolute;
+    left: calc((100% - 30px)/2);
+    top: calc((100% - 30px)/2);
+    z-index: 1;
+    width: 30px;
+    height: 30px;
+    border: 5px solid #f3f3f3;
+    border-radius: 50%;
+    border-top: 5px solid #3498db;
+    -webkit-animation: spin 2s linear infinite;
+    animation: spin 2s linear infinite;
+    display: none;
 }
 
 .output {
@@ -54,4 +74,13 @@ table {
 .pd_4px {
     padding: 4px;
 }
- 
+  
+@-webkit-keyframes spin {
+    0% { -webkit-transform: rotate(0deg); }
+    100% { -webkit-transform: rotate(360deg); }
+}
+  
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}

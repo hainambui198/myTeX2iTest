@@ -1,5 +1,6 @@
 /**
  * Convert MyTeX MCQ to iTest MCQ
+ * @return {html}
  */
 const convert = (laTeX) => {
 	let lines = new String(laTeX).replace(/^\s*\n/gm, "").split(/\r\n|\r|\n/g);
@@ -9,7 +10,6 @@ const convert = (laTeX) => {
 	}
 
 	const questionIndexes = getQuestionIndexes(lines);
-
 	const outputQuestions = [];
 
 	for (let i = 0; i < questionIndexes.length; i++) {
@@ -29,27 +29,43 @@ const convert = (laTeX) => {
  */
 const getQuestionIndexes = (lines) => {
 	if (Array.isArray(lines)) {
-		let beginIndex = -1;
-		let endIndex = -1;
+		let fromIndex = -1;
 		let questionsIndexes = [];
+
 		while(true) {
-			for (let i = endIndex + 1; i < lines.length; i++) {
-				if (lines[i] === '\\begin{ex}') beginIndex = i;
+			let beginIndex = -1;
+			let endIndex = -1;
+			const length = lines.length;
+
+			for (let i = fromIndex + 1; i < length; i++) {
+				if (lines[i] === '\\begin{ex}') {
+					beginIndex = i;
+					break;
+				}
+			}
+			if (beginIndex === -1 || beginIndex === length - 1) {
+				break;
+			}
+
+			for (let i = beginIndex + 1; i < length; i++) {
 				if (lines[i] === '\\end{ex}') {
 					endIndex = i;
 					break;
 				}
 			}
-			if (beginIndex === -1 || endIndex === -1 || beginIndex >= endIndex) {
+			if (endIndex === -1) {
 				break;
-			} else {
-				questionsIndexes.push([beginIndex, endIndex]);
 			}
-			if (endIndex === lines.length - 1) break;
+
+			fromIndex = endIndex;
+			questionsIndexes.push([beginIndex, endIndex]);
 		}
+
 		return questionsIndexes;
 	}
-	else return [];
+	else {
+		return [];
+	}
 }
 
 /**
@@ -58,21 +74,23 @@ const getQuestionIndexes = (lines) => {
  * @return {Object}
  */
 const getOutputQuestion = (lines) => {
-	let solutionIndex = -1;
+	let beginSolutionIndex = -1;
+	let endQuestionIndex = lines.length - 1;
+	let solution = null;
+
 	for (let i = 0; i < lines.length; i++) {
 		if (lines[i].indexOf('\\loigiai') === 0) {
-			solutionIndex = i;
+			beginSolutionIndex = i;
 			break;
 		};
 	}
-	
-	let endQuestionIndex = lines.length - 1;
-	let solution = null;
-	if (solutionIndex > 0) {
-		endQuestionIndex = solutionIndex - 1;
-		const solutionLines = lines.slice(solutionIndex);
+
+	if (beginSolutionIndex >= 0) {
+		endQuestionIndex = beginSolutionIndex - 1;
+		const solutionLines = lines.slice(beginSolutionIndex);
 		solution = getSolution(solutionLines);
 	}
+
 	const questionLines = lines.slice(0, endQuestionIndex + 1);
 	const question = getQuestion(questionLines);
 	
@@ -89,12 +107,12 @@ const getOutputQuestion = (lines) => {
  */
 const getSolution = (lines) => {
 	let solution = "";
-	let firstLineIndex = lines[0] === '\\loigiai' ? 2 : 1;
-	let lastLineIndex = lines.length - 2;
-	for (let i = firstLineIndex; i <= lastLineIndex; i++) {
-		solution += lines[i];
-		if (i !== lastLineIndex) {
-			solution += 'br/>';
+	let beginIndex = lines[0] === '\\loigiai' ? 2 : 1;
+	for (let i = beginIndex; i < lines.length; i++) {
+		if (lines[i] !== "}") {
+			solution += lines[i] + '<br/>';
+		} else {
+			break;
 		}
 	}
 	solution = format(solution);
@@ -111,27 +129,26 @@ const getQuestion = (lines) => {
 	let figure = null;
 	let choices;
 
-	let startQuestionContentIdx = -1;
+	let beginQuestionContentIdx = -1;
 	let endQuestionContentIdx = -1;
-	let startFigureIdx = -1;
+	let beginFigureIdx = -1;
 	let endFigureIdx = -1;
 
 	if (lines[0].indexOf('\\immini') === 0 || lines[0].indexOf('\\impicinpar') === 0) {
-
 		if (lines[1] === '{') {
-			startQuestionContentIdx = 2;
+			beginQuestionContentIdx = 2;
 		} else {
-			startQuestionContentIdx = 1;
+			beginQuestionContentIdx = 1;
 		}
 
 		for (let i = 0; i < lines.length; i++) {
 			if (lines[i] === '}{') {
 				endQuestionContentIdx = i;
-				startFigureIdx = i + 1;
+				beginFigureIdx = i + 1;
 				break;
 			} else if (lines[i] === '}') {
 				endQuestionContentIdx = i;
-				startFigureIdx = i + 2;
+				beginFigureIdx = i + 2;
 				break;
 			}
 		}
@@ -145,19 +162,20 @@ const getQuestion = (lines) => {
 
 		for (let i = endFigureIdx + 1; i < lines.length; i++) {
 			if (lines[i].indexOf('\\choice') === 0) {
-				const questionContentLines = lines.slice(startQuestionContentIdx, endQuestionContentIdx);
-				const figureLines = lines.slice(startFigureIdx, endFigureIdx);
+				const questionContentLines = lines.slice(beginQuestionContentIdx, endQuestionContentIdx);
+				const figureLines = lines.slice(beginFigureIdx, endFigureIdx);
 				const choicesLines = lines.slice(i);
 				questionContent = getQuestionContent(questionContentLines);
 				figure = getFigure(figureLines);
 				choices = getChoices(choicesLines);
 				break;
 			}
-		}	
+		}
+
 		for (let i = 1; i < endQuestionContentIdx; i++) {
 			if (lines[i].indexOf('\\choice') === 0) {
-				const questionContentLines = lines.slice(startQuestionContentIdx, i);
-				const figureLines = lines.slice(startFigureIdx, endFigureIdx);
+				const questionContentLines = lines.slice(beginQuestionContentIdx, i);
+				const figureLines = lines.slice(beginFigureIdx, endFigureIdx);
 				const choicesLines = lines.slice(i, endQuestionContentIdx);
 				questionContent = getQuestionContent(questionContentLines);
 				figure = getFigure(figureLines);
@@ -191,13 +209,16 @@ const getQuestion = (lines) => {
  */
 const getQuestionContent = (lines) => {
 	let questionContent = "";
+
 	for (let i = 0; i < lines.length; i++) {
 		questionContent += lines[i];
 		if (i !== lines.length - 1) {
 			questionContent += '<br/>';
 		}
 	}
+
 	questionContent = format(questionContent);
+
 	return questionContent;
 }
 
@@ -207,24 +228,31 @@ const getQuestionContent = (lines) => {
  * @return {Object}
  */
 const getChoices = (lines) => {
+	// Concate all choices
 	let choicesInALines = "";
+
 	for (let i = 0; i < lines.length; i++) {
 		choicesInALines += lines[i];
 	}
 	
+	// Check if choices is fixed
 	let startChoicesIdx;
 	let isChoicesFixed = false;
+
 	if (choicesInALines.indexOf('\\choicefix') === 0) {
 		startChoicesIdx = '\\choicefix'.length;
 		isChoicesFixed = true;
-	} else if (choicesInALines.indexOf('\\choice') === 0) {
+	} else {
 		startChoicesIdx = '\\choice'.length;
 	}
 
+	// Parse choices
 	const stack = [];
 	const choices = [];
 	let currentChoice = "";
+
 	for (let i = startChoicesIdx; i < choicesInALines.length; i++) {
+		if (choices.length === 4) break;
 		if (choicesInALines.charAt(i) === '{') {
 			if (stack.length === 0) {
 				if (i > startChoicesIdx) {
@@ -248,6 +276,7 @@ const getChoices = (lines) => {
 		}
 	}
 
+	// Return choices with position
 	let correctChoice, mixChoice1, mixChoice2, mixChoice3;
 	let correctAnswerIdx = 0;
 
@@ -263,12 +292,12 @@ const getChoices = (lines) => {
 
 	if (isChoicesFixed) {
 		const alternatives = ['A', 'B', 'C', 'D'];
+
 		correctChoice = alternatives[correctAnswerIdx];
 		mixChoice1 = '';
 		mixChoice2 = '';
 		mixChoice3 = '';
 	} else {
-
 		const tmp = choices[correctAnswerIdx];
 		choices[correctAnswerIdx] = choices[0];
 		choices[0] = tmp;
@@ -309,10 +338,11 @@ const getFigure = (lines) => {
 /**
  * getOutputQuestionsHTML
  * @param {Array} outputQuestions 
- * @returns 
+ * @return {html}
  */
  const getOutputQuestionsHTML = (outputQuestions) => {
     let html = "";
+	const alternatives = ['(A)', '(B)', '(C)', '(D)'];
 
 	for (let i = 0; i < outputQuestions.length; i++) {
 		const question = outputQuestions[i];
@@ -320,6 +350,7 @@ const getFigure = (lines) => {
         if (i > 0) {
 		    html += "<br>";
         }
+
 		html += "<table border=1 cellspacing=0 cellpadding=2>";
 		
 		if (question.figure) {
@@ -332,7 +363,6 @@ const getFigure = (lines) => {
 				html += "<td>";
 				html += question.questionContent;
 				html += "<br/>";
-				const alternatives = ['(A)', '(B)', '(C)', '(D)'];
 				for (let i = 0; i < question.choices.fixedChoices.length; i++) {
 					html += alternatives[i] + ' ' + question.choices.fixedChoices[i] + '<br/>';
 				}
@@ -352,7 +382,6 @@ const getFigure = (lines) => {
 				html += "<td>";
 				html += question.questionContent;
 				html += "<br/>";
-				const alternatives = ['(A)', '(B)', '(C)', '(D)'];
 				for (let i = 0; i < question.choices.fixedChoices.length; i++) {
 					html += alternatives[i] + ' ' + question.choices.fixedChoices[i] + '<br/>';
 				}
@@ -406,20 +435,20 @@ const getFigure = (lines) => {
 } 
 
 /**
- * Convert $...$ to \(\)
+ * Convert $...$ to \(...\)
  * @param {String} laTeX 
  * @return {String}
  */
  function convertMathDelimiter(laTeX) {
-	let il = -1;
-	let ir = -1;
+	let beginIndex = -1;
+	let endIndex = -1;
 
 	while(true) {
-		il = laTeX.indexOf("$");
-		if (il < 0 || il === laTeX.length - 1) break;
-		ir = laTeX.indexOf("$", il + 1);
-		if (ir < 0) break;
-		laTeX = laTeX.substring(0, il) + "\\(" + laTeX.substring(il + 1, ir) + "\\)" + laTeX.substring(ir + 1);
+		beginIndex = laTeX.indexOf("$");
+		if (beginIndex < 0 || beginIndex === laTeX.length - 1) break;
+		endIndex = laTeX.indexOf("$", beginIndex + 1);
+		if (endIndex < 0) break;
+		laTeX = laTeX.substring(0, beginIndex) + "\\(" + laTeX.substring(beginIndex + 1, endIndex) + "\\)" + laTeX.substring(endIndex + 1);
 	}
 
 	return laTeX;
@@ -437,6 +466,7 @@ const laTeX2html = (laTeX) => {
     laTeX = laTeX.replace(/\\begin{center}/g, "<center>");
     laTeX = laTeX.replace(/\\end{center}/g, "</center>");
 	laTeX = laTeX.replace(/\\begin{enumerate}\s*\\item/g, "<ul><li>");
+	laTeX = laTeX.replace(/\\begin{enumerate}\s*/g, "<ul>");
 	laTeX = laTeX.replace(/\\item/g, "</li><li>");
 	laTeX = laTeX.replace(/\\end{enumerate}/g, "</li></ul>");
 	laTeX = laTeX.replace(/\\\\/g, "<br>");
@@ -447,7 +477,7 @@ const laTeX2html = (laTeX) => {
 /**
  * Format LaTeX
  * @param {String} laTeX 
- * @returns 
+ * @return {html}
  */
 const format = (laTeX) => {
 	let html = new String(laTeX);
@@ -456,6 +486,30 @@ const format = (laTeX) => {
     html = laTeX2html(html);
 
     return html;
+}
+
+/**
+ * convertWithLoaderAndScroll
+ */
+const convertWithLoaderAndScroll = (html) => {
+	const outputHeader = document.querySelector("p.output_header");
+	const outputContainer = document.querySelector("div.output_container");
+	const outputLoader = document.querySelector("div.output_loader");
+	const output = document.querySelector("div.output");
+
+	// Scroll to output after converting
+	outputHeader.scrollIntoView({
+		behavior: "smooth",
+	});
+
+	// Open loading overlay
+	outputLoader.style.display = "block";
+	outputContainer.style.backgroundColor = "rgba(0, 0, 0, 0.1)";
+	setTimeout(() => {
+		outputLoader.style.display = "none";
+		outputContainer.style.backgroundColor = "transparent";
+		output.innerHTML = html;
+	}, 1000);
 }
 
 /**
@@ -471,15 +525,34 @@ document.querySelector("button.btn_clear").onclick = () => {
  */
 document.querySelector("button.btn_convert").onclick = () => {
 	let html = convert(document.querySelector("textarea.input").value);
-    document.querySelector("div.output").innerHTML = html;
+	convertWithLoaderAndScroll(html);
 };
+
+/**
+ * Handle click convert file button
+ */
+document.querySelector("button.btn_convert_file").onclick = () => {
+	const file = document.getElementById("input_file").files[0];
+	const reader = new FileReader();
+
+	reader.addEventListener("load", () => {
+		let html = convert(reader.result);
+		convertWithLoaderAndScroll(html);
+	});
+
+	if (file) {
+		reader.readAsText(file);
+	}
+}
 
 /**
  * Handle click export to msword button
  */
 document.querySelector("button.btn_export").onclick = () => {
     const output = document.querySelector('div.output').innerHTML;
-    if (!output) return;
+    if (!output) {
+		return;
+	}
 
     const preHtml = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title></head><body>";
     const postHtml = "</body></html>";
@@ -490,14 +563,12 @@ document.querySelector("button.btn_export").onclick = () => {
     });
     
     const url = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(html);
-    
     const filename = 'questions.doc';
-    
     const downloadLink = document.createElement("a");
 
     document.body.appendChild(downloadLink);
     
-    if (navigator.msSaveOrOpenBlob){
+    if (navigator.msSaveOrOpenBlob) {
         navigator.msSaveOrOpenBlob(blob, filename);
     } else {
         downloadLink.href = url;
